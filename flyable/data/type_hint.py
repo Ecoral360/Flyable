@@ -1,17 +1,20 @@
+from flyable.data.lang_type import LangType
+
+
 class TypeHint:
     pass
 
 
-def get_lang_type_contained_hint_type(lang_type, hint_type):
+def get_lang_type_contained_hint_type(lang_type: LangType, hint_type: TypeHint):
     for hint in lang_type.get_hints():
-        if isinstance(hint, hint_type):
+        if isinstance(hint, type(hint_type)):
             return hint
     return None
 
 
-def remove_hint_type(lang_type, hint_type):
+def remove_hint_type(lang_type: LangType, hint_type: TypeHint):
     for i, hint in enumerate(lang_type.get_hints()):
-        if isinstance(hint, hint_type):
+        if isinstance(hint, type(hint_type)):
             lang_type.remove_hint(i)
             remove_hint_type(lang_type, hint_type)
             return True

@@ -18,7 +18,7 @@ class LangFile:
         self.__text: str = txt
         self.__classes: list[lang_class.LangClass] = []
         self.__funcs: list[lang_func.LangFunc] = []
-        self.__global_func = None
+        self.__global_func: Union[lang_func.LangFunc, None] = None
         self.__ast: Union[Module, None] = None
 
     def read_from_path(self, path: str):
@@ -90,7 +90,7 @@ class LangFile:
     def get_func(self, index: int):
         return self.__funcs[index]
 
-    def set_global_func(self, global_func):
+    def set_global_func(self, global_func: lang_func.LangFunc):
         self.__global_func = global_func
 
     def get_global_func(self):

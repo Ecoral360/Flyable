@@ -12,7 +12,7 @@ import flyable.code_gen.module as gen_module
 from collections import OrderedDict
 import enum
 import flyable.code_gen.ref_counter as ref_counter
-
+from flyable.data.lang_func_impl import LangFuncImpl
 
 class Linkage(enum.IntEnum):
     INTERNAL = 1,
@@ -386,9 +386,6 @@ class CodeGen:
         """
         return self.__py_func_type_var
 
-    def get_method_type(self):
-        return self.__method_type
-
     def get_tuple_type(self):
         return self.__tuple_type
 
@@ -499,7 +496,7 @@ class CodeGen:
             for attribute in _class.attributes_iter():
                 _class.get_struct().add_type(attribute.get_type().to_code_type(self))
 
-    def gen_func(self, impl):
+    def gen_func(self, impl: LangFuncImpl):
         """
         Take an implementation  and create a callable CodeFunction from it
         """

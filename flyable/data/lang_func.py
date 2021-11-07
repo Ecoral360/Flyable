@@ -15,9 +15,9 @@ class LangFunc:
         body....
     """
 
-    def __init__(self, node):
+    def __init__(self, node: ast.AST):
 
-        self.__node = node
+        self.__node: ast.AST = node
 
         self.__id = -1
         # Setup args
@@ -59,15 +59,19 @@ class LangFunc:
     def impls_iter(self):
         return iter(self.__impls)
 
-    def find_impl_by_signature(self, args_type):
-        for i in self.__impls:
-            if not i.is_unknown() and i.get_args_count() == len(args_type):  # Same arguments count
-                same_signature = True
-                for j in range(i.get_args_count()):
-                    if i.get_arg(j) != args_type[j]:
-                        same_signature = False
-                if same_signature:
-                    return i
+    def find_impl_by_signature(self, args_type: list[type.LangType]):
+        for func_impl in self.__impls:
+            if func_impl.is_unknown() or func_impl.get_args_count() != len(args_type):  # Same arguments count
+                continue
+            same_signature = all(
+                func_impl.get_arg(j) == args_type[j] for j in range(func_impl.get_args_count())
+            )
+            # for j in range(func_impl.get_args_count()):
+            #     if func_impl.get_arg(j) != args_type[j]:
+            #         same_signature = False
+            if same_signature:
+                return func_impl
+        return None
 
     def get_min_args(self):
         """

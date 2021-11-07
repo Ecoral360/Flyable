@@ -1,4 +1,5 @@
 import copy
+from flyable.data.lang_func import LangFunc
 
 import flyable.data.lang_type as type
 import flyable.parse.context as context
@@ -30,7 +31,7 @@ class LangFuncImpl:
         self.__unknown: bool = False
         self.__code_func = None
         self.__args: list[type.LangType] = []
-        self.__parent_func = None
+        self.__parent_func: LangFunc = None
 
         self.__parse_status = LangFuncImpl.ParseStatus.NOT_STARTED
 

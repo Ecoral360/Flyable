@@ -29,22 +29,24 @@ def main(file: str, output_dir: str = ".", exec_name: str = "a"):
 
     end_step()
 
-    if not compiler.has_error():
-        # Link the object file
-        start_step("Linking")
+    if compiler.has_error():
+        return
 
-        # Now link the code
-        python_lib = "python310.lib" if platform.system() == "Windows" else "python3.10.a"
-        linker_args = ["gcc", "-flto", "output.o",
-                       "libFlyableRuntime.a", python_lib]
-        p = Popen(linker_args, cwd=output_dir)
-        p.wait()
-        if p.returncode != 0:
-            raise Exception("Linking error")
+    # Link the object file
+    start_step("Linking")
 
-        end_step()
-        
-        
+    # Now link the code
+    python_lib = "python310.lib" if platform.system() == "Windows" else "python3.10.a"
+    linker_args = ["gcc", "-flto", "output.o",
+                   "libFlyableRuntime.a", python_lib]
+    p = Popen(linker_args, cwd=output_dir)
+    p.wait()
+    if p.returncode != 0:
+        raise Exception("Linking error")
+
+    end_step()
+
+
 def run_code(output_dir: str, exec_name: str):
     """Runs the code
 
@@ -53,7 +55,8 @@ def run_code(output_dir: str, exec_name: str):
         exec_name (str): the name of the executable
     """
     start_step("Running")
-    p = Popen([output_dir + f"/{exec_name}.exe"], cwd=output_dir, stdin=PIPE, stdout=PIPE)
+    p = Popen([output_dir + f"/{exec_name}.exe"],
+              cwd=output_dir, stdin=PIPE, stdout=PIPE)
     output, err = p.communicate()
     end_step()
 

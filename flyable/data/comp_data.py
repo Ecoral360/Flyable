@@ -68,7 +68,7 @@ class CompData:
     def get_files_count(self):
         return len(self.__files)
 
-    def add_func(self, func):
+    def add_func(self, func: LangFunc):
         self.__change = True
         func.set_id(self.get_funcs_count())
         self.__funcs.append(func)
@@ -82,12 +82,12 @@ class CompData:
     def funcs_iter(self):
         return iter(self.__funcs)
 
-    def add_class(self, _class):
+    def add_class(self, _class: LangClass):
         self.__change = True
         _class.set_id(self.get_classes_count())
         self.__classes.append(_class)
 
-    def get_class(self, index: int):
+    def get_class_by_id(self, index: int):
         return self.__classes[index]
 
     def get_classes_count(self):

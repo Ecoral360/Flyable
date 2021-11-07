@@ -11,10 +11,10 @@ import flyable.data.lang_class as lang_class
 
 class Compiler(ErrorThrower):
 
-    def __init__(self):
+    def __init__(self, output_path: str = "output.o"):
         super().__init__()
         self.__data: comp_data.CompData = comp_data.CompData()
-        self.set_output_path("output.o")
+        self.set_output_path(output_path)
         self.__code_gen: CodeGen = gen.CodeGen(self.__data)
         self.__code_gen.setup()
         self.__parser: par.Parser = par.Parser(self.__data, self.__code_gen)
@@ -24,7 +24,7 @@ class Compiler(ErrorThrower):
         new_file.read_from_path(path)
         self.__data.add_file(new_file)
 
-    def set_output_path(self, path):
+    def set_output_path(self, path: str):
         self.__data.set_config("output", path)
 
     def compile(self):

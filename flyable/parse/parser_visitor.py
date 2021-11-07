@@ -323,7 +323,7 @@ class ParserVisitor(NodeVisitor):
                 self.__last_type.add_hint(hint.TypeHintRefIncr())
                 self.__last_value = fly_obj.py_obj_get_attr(self, self.__last_value, str_value)
         elif self.__last_type.is_obj():  # Flyable obj. The attribute type might be known. GEP access for more speed
-            attr = self.__data.get_class(self.__last_type.get_id()).get_attribute(str_value)
+            attr = self.__data.get_class_by_id(self.__last_type.get_id()).get_attribute(str_value)
             if attr is not None:  # We found the attribute
                 first_index = self.__builder.const_int32(0)
                 second_index = self.__builder.const_int32(fly_obj.get_obj_attribute_start_index() + attr.get_id())
@@ -351,7 +351,7 @@ class ParserVisitor(NodeVisitor):
                     new_attr = flyable.data.attribut.Attribut()
                     new_attr.set_name(node.attr)
                     new_attr.set_type(self.__assign_type)
-                    self.__data.get_class(self.__last_type.get_id()).add_attribute(new_attr)
+                    self.__data.get_class_by_id(self.__last_type.get_id()).add_attribute(new_attr)
                     first_index = self.__builder.const_int32(0)
                     second_index = self.__builder.const_int32(
                         fly_obj.get_obj_attribute_start_index() + new_attr.get_id())
@@ -451,7 +451,7 @@ class ParserVisitor(NodeVisitor):
             self.__last_type, self.__last_value = caller.call_obj(self, name_call, self.__last_value, self.__last_type,
                                                                   args, args_types)
         elif self.__last_type.is_obj():
-            _class = self.__data.get_class(self.__last_type.get_id())
+            _class = self.__data.get_class_by_id(self.__last_type.get_id())
             func_to_call = _class.get_func(name_call)
             if func_to_call is None:
                 str_error = "Not method '" + name_call + "' found"
