@@ -1,6 +1,5 @@
 import copy
 from flyable.code_gen.code_gen import CodeGen
-from flyable.data.argument import Argument
 from flyable.data.lang_func import LangFunc
 
 import flyable.data.lang_func_impl as lang_func_impl
@@ -11,7 +10,7 @@ from flyable.parse.variable import Variable
 from flyable.data.comp_data import CompData
 
 
-def adapt_call(func_name: str, call_type: LangType, args: list[Argument], comp_data: CompData, parser: Parser, codegen: CodeGen):
+def adapt_call(func_name: str, call_type: LangType, args: list[LangType], comp_data: CompData, parser: Parser, codegen: CodeGen):
     """
     Handle the logic to make the function call possible.
     If it's a Flyable optimized object, it will specialise a function.
