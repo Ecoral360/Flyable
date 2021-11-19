@@ -1,10 +1,18 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flyable.code_gen import CodeFunc
+    from flyable.data.lang_func import LangFunc
+    from flyable.data.lang_type import LangType
+
+
 import copy
-from flyable.data.lang_func import LangFunc
+import enum
 
 import flyable.data.lang_type as type
 import flyable.parse.context as context
 import flyable.data.type_hint as hint
-import enum
 
 
 class LangFuncImpl:
@@ -29,13 +37,13 @@ class LangFuncImpl:
     def __init__(self):
         self.__id: int = -1
         self.__unknown: bool = False
-        self.__code_func = None
-        self.__args: list[type.LangType] = []
+        self.__code_func: CodeFunc = None
+        self.__args: list[LangType] = []
         self.__parent_func: LangFunc = None
 
         self.__parse_status = LangFuncImpl.ParseStatus.NOT_STARTED
 
-        self.__return_type: type.LangType = type.LangType()
+        self.__return_type: LangType = type.LangType()
 
         self.__context: context.Context = context.Context()
 
@@ -49,7 +57,7 @@ class LangFuncImpl:
     def get_id(self):
         return self.__id
 
-    def add_arg(self, arg: type.LangType):
+    def add_arg(self, arg: LangType):
         arg = copy.deepcopy(arg)
         hint.remove_hint_type(arg, hint.TypeHintRefIncr)
         self.__args.append(arg)
@@ -84,12 +92,12 @@ class LangFuncImpl:
     def get_return_type(self):
         return self.__return_type
 
-    def set_return_type(self, return_type: type.LangType):
+    def set_return_type(self, return_type: LangType):
         return_type = copy.deepcopy(return_type)
         hint.remove_hint_type(return_type, hint.TypeHintRefIncr)
         self.__return_type = return_type
 
-    def set_code_func(self, func):
+    def set_code_func(self, func: CodeFunc):
         self.__code_func = func
 
     def get_code_func(self):

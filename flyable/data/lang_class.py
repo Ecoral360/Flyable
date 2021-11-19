@@ -1,23 +1,27 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from flyable.data.lang_func import LangFunc
+    from flyable.data.attribut import Attribut
 
 import ast
-from typing import Union
-from flyable.data.lang_file import LangFile
-from flyable.data.lang_func import LangFunc
+
+import flyable.data.lang_file as lang_file
 from flyable.data.lang_type import LangType
-from flyable.data.attribut import Attribut
 import flyable.data.lang_class_type as class_type
 
 
 class LangClass:
 
     def __init__(self, node: ast.AST):
+
         self.__node: ast.AST = node
         self.__funcs: list[LangFunc] = []
         self.__attributes: list[Attribut] = []
         self.__id: int = -1
         self.__struct = None
-        self.__file: Union[LangFile, None] = None
+        self.__file: Union[lang_file.LangFile, None] = None
         self.__inherits: list[LangClass] = []
         self.__class_type = class_type.LangClassType()
 

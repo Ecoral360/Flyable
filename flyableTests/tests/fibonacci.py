@@ -1,9 +1,12 @@
-def fibonacci(n):
-    if n <= 1:
-        return n
-    else:
-        return fibonacci(n - 1) + fibonacci(n - 2)
+def fib(n):
+    a = 0
+    b = 1
+    for i in range(n):
+        y = b
+        b = a + b
+        a = y
+    return a
 
 
-result = fibonacci(10)
+result = fib(10)
 print(result)

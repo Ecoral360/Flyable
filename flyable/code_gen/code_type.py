@@ -1,5 +1,11 @@
+from __future__ import annotations
+
 import enum
 import copy
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flyable.code_gen.code_writer import CodeWriter
 
 
 def get_void():
@@ -133,7 +139,7 @@ class CodeType:
     def set_array_size(self, size):
         self.__array_size = size
 
-    def write_to_code(self, writer):
+    def write_to_code(self, writer: CodeWriter):
         writer.add_int32(int(self.__type))
         writer.add_int32(int(self.__ptr_level))
         writer.add_int32(int(self.__struct_id))

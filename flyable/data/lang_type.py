@@ -3,7 +3,8 @@ from functools import reduce
 
 import copy
 from enum import Enum
-from typing import Union
+
+
 from flyable.code_gen.code_type import CodeType
 import flyable.code_gen.code_type as code_type
 import flyable.data.type_hint as hint

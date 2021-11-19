@@ -1,4 +1,8 @@
-from flyable.data.lang_type import LangType
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flyable.data.lang_type import LangType
 
 
 class TypeHint:
@@ -62,7 +66,8 @@ Type hints
 
 def is_python_type(lang_type, class_path):
     if lang_type.is_python_obj():
-        found_hint = get_lang_type_contained_hint_type(lang_type, TypeHintPythonType)
+        found_hint = get_lang_type_contained_hint_type(
+            lang_type, TypeHintPythonType)
         if found_hint is not None:
             return found_hint.get_class_path() == class_path
     return False

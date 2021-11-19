@@ -1,16 +1,22 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flyable.data.lang_type import LangType
+    from flyable.code_gen.code_gen import CodeGen
+    from flyable.data.lang_func import LangFunc
+    from flyable.data.comp_data import CompData
+    from flyable.parse.parser import Parser
+
+
 import copy
-from flyable.code_gen.code_gen import CodeGen
-from flyable.data.lang_func import LangFunc
 
 import flyable.data.lang_func_impl as lang_func_impl
-from flyable.data.lang_type import LangType
+
 import flyable.data.type_hint as hint
-from flyable.parse.parser import Parser
-from flyable.parse.variable import Variable
-from flyable.data.comp_data import CompData
 
 
-def adapt_call(func_name: str, call_type: LangType, args: list[LangType], comp_data: CompData, parser: Parser, codegen: CodeGen):
+def adapt_call(func_name: str, call_type: LangType, args: list[LangType], comp_data: CompData, parser: Parser, code_gen: CodeGen):
     """
     Handle the logic to make the function call possible.
     If it's a Flyable optimized object, it will specialise a function.

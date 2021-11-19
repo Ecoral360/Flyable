@@ -1,30 +1,39 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any, Union
+
+if TYPE_CHECKING:
+    from flyable.data.lang_func_impl import LangFuncImpl
+    from flyable.code_gen.code_builder import CodeBuilder
+    from flyable.data.lang_type import LangType
+    from flyable.code_gen.code_gen import CodeGen, CodeFunc
+    from flyable.parse.parser import Parser
+
 import ast
 from ast import *
-from typing import Any
-from flyable.data.lang_type import *
-import flyable.data.lang_type as lang_type
-import flyable.data.lang_func_impl as func
+import copy
+import enum
+
+
 import flyable.parse.op as op
+import flyable.parse.build_in as build
+import flyable.parse.adapter as adapter
+
 import flyable.data.lang_class as lang_class
 import flyable.data.lang_func as lang_func
-import flyable.parse.adapter as adapter
-import flyable.parse.build_in as build
 import flyable.data.attribut
-from flyable.data.lang_func_impl import LangFuncImpl
 import flyable.data.comp_data as comp_data
-from flyable.code_gen.code_builder import CodeBuilder
+import flyable.data.type_hint as hint
+import flyable.data.lang_type as lang_type
+
 import flyable.code_gen.caller as caller
 import flyable.code_gen.list as gen_list
 import flyable.code_gen.set as gen_set
 import flyable.code_gen.tuple as gen_tuple
 import flyable.code_gen.dict as gen_dict
 import flyable.code_gen.runtime as runtime
-import enum
-import flyable.code_gen.op_call as op_call
-import flyable.data.lang_type as lang_type
-import flyable.data.type_hint as hint
+import flyable.code_gen.code_type as code_type
 import flyable.code_gen.ref_counter as ref_counter
-import flyable.tool.repr_visitor as repr_vis
+import flyable.code_gen.op_call as op_call
 import flyable.code_gen.exception as excp
 import flyable.code_gen.cond as cond
 import flyable.code_gen.code_gen as gen
@@ -32,6 +41,8 @@ import flyable.code_gen.fly_obj as fly_obj
 import flyable.code_gen.module as gen_module
 import flyable.code_gen.slice as gen_slice
 import flyable.code_gen.debug as debug
+
+import flyable.tool.repr_visitor as repr_vis
 
 
 class ParserVisitMode(enum.IntEnum):
@@ -41,12 +52,12 @@ class ParserVisitMode(enum.IntEnum):
 
 class ParserVisitor(NodeVisitor):
 
-    def __init__(self, parser, code_gen, func_impl):
+    def __init__(self, parser: Parser, code_gen: CodeGen, func_impl: LangFuncImpl):
         self.__mode = ParserVisitMode.GENERAL
-        self.__code_gen: gen.CodeGen = code_gen
-        self.__assign_type: LangType = LangType()
+        self.__code_gen: CodeGen = code_gen
+        self.__assign_type: LangType = lang_type.LangType()
         self.__assign_value = None
-        self.__last_type: LangType = LangType()
+        self.__last_type: LangType = lang_type.LangType()
         self.__last_value = None
         self.__func: LangFuncImpl = func_impl
         self.__parser = parser
@@ -56,11 +67,14 @@ class ParserVisitor(NodeVisitor):
 
         self.__assign_depth = 0
 
-        self.__out_blocks = []  # Hierarchy of blocks to jump when a context is over
-        self.__cond_blocks = []  # Hierarchy of current blocks that might not get executed
-        self.__exception_blocks = []  # Hierarchy of blocks to jump when an exception occur to dispatch it
+        # Hierarchy of blocks to jump when a context is over
+        self.__out_blocks: list[CodeFunc.CodeBlock] = []
+        # Hierarchy of current blocks that might not get executed
+        self.__cond_blocks: list[CodeFunc.CodeBlock] = []
+        # Hierarchy of blocks to jump when an exception occur to dispatch it
+        self.__exception_blocks: list[CodeFunc.CodeBlock] = []
 
-        self.__entry_block = func_impl.get_code_func().add_block()
+        self.__entry_block: CodeFunc.CodeBlock = func_impl.get_code_func().add_block()
 
         self.__builder: CodeBuilder = func_impl.get_code_func().get_builder()
         self.__builder.set_insert_block(self.__entry_block)
@@ -90,7 +104,8 @@ class ParserVisitor(NodeVisitor):
         self.__builder.set_insert_block(self.__entry_block)
         self.__builder.br(self.__content_block)
 
-        self.__func.get_code_func().set_return_type(self.__func.get_return_type().to_code_type(self.__code_gen))
+        self.__func.get_code_func().set_return_type(
+            self.__func.get_return_type().to_code_type(self.__code_gen))
         self.__code_gen.fill_not_terminated_block(self)
 
     def visit(self, node):
@@ -109,47 +124,60 @@ class ParserVisitor(NodeVisitor):
         return self.__last_type, self.__last_value
 
     def visit_Assign(self, node: Assign) -> Any:
+        def unpack(targets: ast.Tuple, values: list[expr]):
+            """Unpack a list of values to a tuple of targets"""
+
+        def assign(target: expr, value: expr):
+            """Assign a value to a target or unpack if the target is an ast.Tuple"""
+
         self.__assign_depth += 1
-        targets = []
+        targets: list[Union[list[expr], expr]] = []
         values = []
 
-        if isinstance(node.targets[0], ast.Tuple):  # mult assign
-            for e in node.targets[0].elts:
-                targets.append(e)
-        else:
-            targets.append(node.targets)
+        for target in node.targets:
+            if isinstance(target, ast.Tuple):  # unpacking
+                targets.append(target.elts)
+            else:
+                targets.append(target)
 
-        if isinstance(node.value, ast.Tuple):
-            for e in node.value.elts:
-                values.append(e)
+        value = node.value
+        if isinstance(value, ast.Tuple):
+            values.extend(value.elts)
         else:
-            values.append(node.value)
+            values.append(value)
 
-        if len(targets) == 1:  # Normal assign
-            self.__assign_type, self.__assign_value = self.__visit_node(node.value)
+        if len(targets) == 1:  # Single assign
+            self.__assign_type, self.__assign_value = self.__visit_node(
+                node.value)
 
             if not hint.is_incremented_type(self.__assign_type):
-                ref_counter.ref_incr(self.__builder, self.__assign_type, self.__assign_value)
+                ref_counter.ref_incr(
+                    self.__builder, self.__assign_type, self.__assign_value)
             hint.remove_hint_type(self.__assign_type, hint.TypeHintRefIncr)
 
             self.__reset_last()
-            self.__last_type, self.__last_value = self.__visit_node(node.targets)
+            self.__last_type, self.__last_value = self.__visit_node(
+                node.targets)
         else:  # Mult assign
             if len(targets) == len(values):
                 for i, e in enumerate(targets):
                     self.__reset_last()
-                    self.__assign_type, self.__assign_value = self.__visit_node(values[i])
+                    self.__assign_type, self.__assign_value = self.__visit_node(
+                        values[i])
 
                     if not hint.is_incremented_type(self.__assign_type):
-                        ref_counter.ref_incr(self.__builder, self.__assign_type, self.__assign_value)
-                    hint.remove_hint_type(self.__assign_type, hint.TypeHintRefIncr)
+                        ref_counter.ref_incr(
+                            self.__builder, self.__assign_type, self.__assign_value)
+                    hint.remove_hint_type(
+                        self.__assign_type, hint.TypeHintRefIncr)
 
                     self.__reset_last()
                     value_type, value = self.__visit_node(targets[i])
             elif len(targets) > 1 and len(values) == 1:  # unpack
                 raise NotImplementedError("Unpack assignation not implemented")
             else:
-                self.__parser.throw_error("Incorrect amount of value to unpack", node.lineno, node.end_col_offset)
+                self.__parser.throw_error(
+                    "Incorrect amount of value to unpack", node.lineno, node.end_col_offset)
 
         self.__reset_last()
         self.__assign_depth -= 1
@@ -157,14 +185,17 @@ class ParserVisitor(NodeVisitor):
     def visit_AnnAssign(self, node: AnnAssign) -> Any:
         self.__assign_depth += 1
         if node.value is not None:
-            self.__assign_type, self.__assign_value = self.__visit_node(node.value)
+            self.__assign_type, self.__assign_value = self.__visit_node(
+                node.value)
             self.__reset_last()
 
             if not hint.is_incremented_type(self.__assign_type):
-                ref_counter.ref_incr(self.__builder, self.__assign_type, self.__assign_value)
+                ref_counter.ref_incr(
+                    self.__builder, self.__assign_type, self.__assign_value)
             hint.remove_hint_type(self.__assign_type, hint.TypeHintRefIncr)
 
-            self.__last_type, self.__last_value = self.__visit_node(node.target)
+            self.__last_type, self.__last_value = self.__visit_node(
+                node.target)
             self.__reset_last()
 
         self.__assign_depth -= 1
@@ -182,7 +213,8 @@ class ParserVisitor(NodeVisitor):
     def visit_UnaryOp(self, node: UnaryOp) -> Any:
         value_type, value = self.__visit_node(node.operand)
 
-        self.__last_type, self.__last_value = op_call.unary_op(self, value_type, value, node.op)
+        self.__last_type, self.__last_value = op_call.unary_op(
+            self, value_type, value, node.op)
         ref_counter.ref_decr_incr(self, value_type, value)
 
     def visit_BoolOp(self, node: BoolOp) -> Any:
@@ -213,7 +245,8 @@ class ParserVisitor(NodeVisitor):
             current_op = node.ops[e]
             last_type, last_value = op_call.cond_op(self, current_op, first_type, first_value, second_type,
                                                     second_value)
-            ref_counter.ref_decr_multiple_incr(self, [first_type, second_type], [first_value, second_value])
+            ref_counter.ref_decr_multiple_incr(self, [first_type, second_type], [
+                                               first_value, second_value])
         self.__last_value = last_value
         self.__last_type = last_type
 
@@ -226,7 +259,8 @@ class ParserVisitor(NodeVisitor):
 
         if left_type.is_primitive():
             old_value = self.__builder.load(left_value)
-            new_type, new_value = op_call.bin_op(self, node.op, left_type, old_value, right_type, right_value)
+            new_type, new_value = op_call.bin_op(
+                self, node.op, left_type, old_value, right_type, right_value)
             self.__builder.store(new_value, left_value)
         else:
             raise NotImplementedError()
@@ -260,7 +294,8 @@ class ParserVisitor(NodeVisitor):
         if found_var is not None:
             self.__last_type = found_var.get_type()
             if found_var.is_global():
-                self.__last_value = self.__builder.global_var(found_var.get_code_gen_value())
+                self.__last_value = self.__builder.global_var(
+                    found_var.get_code_gen_value())
             else:
                 self.__last_value = found_var.get_code_gen_value()
 
@@ -269,42 +304,53 @@ class ParserVisitor(NodeVisitor):
                 if isinstance(node.ctx, Store):
                     # Decrement the old content
                     old_content = self.__builder.load(self.__last_value)
-                    ref_counter.ref_decr_nullable(self, found_var.get_type(), old_content)
+                    ref_counter.ref_decr_nullable(
+                        self, found_var.get_type(), old_content)
 
                     # The variable might have a new type
-                    found_var.set_type(lang_type.get_most_common_type(self.__data, found_var.get_type(), self.__assign_type))
+                    found_var.set_type(lang_type.get_most_common_type(
+                        self.__data, found_var.get_type(), self.__assign_type))
 
                     # Store the new content
-                    self.__builder.store(self.__assign_value, self.__last_value)
+                    self.__builder.store(
+                        self.__assign_value, self.__last_value)
                     self.__last_become_assign()
                 else:
                     self.__last_value = self.__builder.load(self.__last_value)
                     self.__last_type = found_var.get_type()
-        elif build.get_build_in_name(node.id) is not None:  # An element in the build-in module
+        # An element in the build-in module
+        elif build.get_build_in_name(node.id) is not None:
             self.__last_type = lang_type.get_python_obj_type()
-            module = self.__builder.global_var(self.__code_gen.get_build_in_module())
+            module = self.__builder.global_var(
+                self.__code_gen.get_build_in_module())
             module = self.__builder.load(module)
             str_content = self.__code_gen.get_or_insert_str(node.id)
-            str_content = self.__builder.load(self.__builder.global_var(str_content))
-            self.__last_value = fly_obj.py_obj_get_attr(self, module, str_content)
+            str_content = self.__builder.load(
+                self.__builder.global_var(str_content))
+            self.__last_value = fly_obj.py_obj_get_attr(
+                self, module, str_content)
         elif isinstance(node.ctx, Store):  # not found so declaring a variable
             found_var = self.__func.get_context().add_var(node.id, self.__assign_type)
             if self.__func.get_parent_func().is_global():
                 var_name = "@global@var" + self.__func.get_parent_func().get_file().get_path()
-                new_global_var = gen.GlobalVar(var_name, self.__assign_type.to_code_type(self.__code_gen))
+                new_global_var = gen.GlobalVar(
+                    var_name, self.__assign_type.to_code_type(self.__code_gen))
                 found_var.set_code_gen_value(new_global_var)
                 found_var.set_global(True)
                 self.__code_gen.add_global_var(new_global_var)
-                self.__builder.store(self.__assign_value, self.__builder.global_var(new_global_var))
+                self.__builder.store(self.__assign_value,
+                                     self.__builder.global_var(new_global_var))
                 self.__last_become_assign()
             else:
-                alloca_value = self.generate_entry_block_var(self.__assign_type.to_code_type(self.__code_gen), True)
+                alloca_value = self.generate_entry_block_var(
+                    self.__assign_type.to_code_type(self.__code_gen), True)
                 found_var.set_code_gen_value(alloca_value)
                 self.__builder.store(self.__assign_value, alloca_value)
                 self.__last_value = found_var.get_code_gen_value()
             self.__last_type = found_var.get_type()
         else:
-            self.__parser.throw_error("Undefined '" + node.id + "'", node.lineno, node.col_offset)
+            self.__parser.throw_error(
+                "Undefined '" + node.id + "'", node.lineno, node.col_offset)
 
     def visit_Attribute(self, node: Attribute) -> Any:
         self.__reset_last()
@@ -315,25 +361,32 @@ class ParserVisitor(NodeVisitor):
             if isinstance(node.ctx, ast.Store):
                 _, py_obj = runtime.value_to_pyobj(self.__code_gen, self.__builder, self.__assign_value,
                                                    self.__assign_type)
-                runtime.py_runtime_set_attr(self.__code_gen, self.__builder, self.__last_value, str_value, py_obj)
+                runtime.py_runtime_set_attr(
+                    self.__code_gen, self.__builder, self.__last_value, str_value, py_obj)
                 self.__last_become_assign()
             elif isinstance(node.ctx, ast.Del):
                 fly_obj.py_obj_del_attr(self, self.__last_value, str_value)
             else:
                 self.__last_type.add_hint(hint.TypeHintRefIncr())
-                self.__last_value = fly_obj.py_obj_get_attr(self, self.__last_value, str_value)
+                self.__last_value = fly_obj.py_obj_get_attr(
+                    self, self.__last_value, str_value)
         elif self.__last_type.is_obj():  # Flyable obj. The attribute type might be known. GEP access for more speed
-            attr = self.__data.get_class_by_id(self.__last_type.get_id()).get_attribute(str_value)
+            attr = self.__data.get_class_by_id(
+                self.__last_type.get_id()).get_attribute(str_value)
             if attr is not None:  # We found the attribute
                 first_index = self.__builder.const_int32(0)
-                second_index = self.__builder.const_int32(fly_obj.get_obj_attribute_start_index() + attr.get_id())
-                attr_index = self.__builder.gep(self.__last_value, first_index, second_index)
+                second_index = self.__builder.const_int32(
+                    fly_obj.get_obj_attribute_start_index() + attr.get_id())
+                attr_index = self.__builder.gep(
+                    self.__last_value, first_index, second_index)
 
-                common_type = lang_type.get_most_common_type(self.__data, attr.get_type(), self.__assign_type)
+                common_type = lang_type.get_most_common_type(
+                    self.__data, attr.get_type(), self.__assign_type)
                 if attr.get_type() != common_type:  # Type mismatch between the attribute and the new assign
                     # Change the type of the attribute
                     attr.set_type(common_type)
-                    self.__data.set_changed(True)  # Tell we changed an attribute to trigger a new compilation
+                    # Tell we changed an attribute to trigger a new compilation
+                    self.__data.set_changed(True)
 
                 if isinstance(node.ctx, ast.Store):
                     if attr.get_type().is_python_obj():
@@ -351,11 +404,13 @@ class ParserVisitor(NodeVisitor):
                     new_attr = flyable.data.attribut.Attribut()
                     new_attr.set_name(node.attr)
                     new_attr.set_type(self.__assign_type)
-                    self.__data.get_class_by_id(self.__last_type.get_id()).add_attribute(new_attr)
+                    self.__data.get_class_by_id(
+                        self.__last_type.get_id()).add_attribute(new_attr)
                     first_index = self.__builder.const_int32(0)
                     second_index = self.__builder.const_int32(
                         fly_obj.get_obj_attribute_start_index() + new_attr.get_id())
-                    attr_index = self.__builder.gep(self.__last_value, first_index, second_index)
+                    attr_index = self.__builder.gep(
+                        self.__last_value, first_index, second_index)
 
                     if new_attr.get_type().is_python_obj():
                         self.__assign_type, self.__assign_value = runtime.value_to_pyobj(
@@ -389,7 +444,8 @@ class ParserVisitor(NodeVisitor):
 
         name_call = ""
         if isinstance(node.func, ast.Attribute):
-            self.__last_type, self.__last_value = self.__visit_node(node.func.value)
+            self.__last_type, self.__last_value = self.__visit_node(
+                node.func.value)
             name_call = node.func.attr
         elif isinstance(node.func, ast.Name):
             name_call = node.func.id
@@ -401,7 +457,8 @@ class ParserVisitor(NodeVisitor):
             call_python_module = False
             if build_in_func is not None and self.__last_type is None:  # Build-in func call
                 if isinstance(build_in_func, build.BuildInFunc):
-                    type_values = build_in_func.parse(args_types, args, self.__code_gen, self.__builder)
+                    type_values = build_in_func.parse(
+                        args_types, args, self.__code_gen, self.__builder)
                     if type_values is None:
                         call_python_module = True
                     else:
@@ -411,10 +468,11 @@ class ParserVisitor(NodeVisitor):
 
                 if call_python_module:
                     self.__last_type = lang_type.get_python_obj_type()
-                    module = self.__builder.global_var(self.__code_gen.get_build_in_module())
+                    module = self.__builder.global_var(
+                        self.__code_gen.get_build_in_module())
                     module = self.__builder.load(module)
                     self.__last_type, self.__last_value = caller.call_obj(self, name_call, module,
-                                                                          get_python_obj_type(), args, args_types)
+                                                                          lang_type.get_python_obj_type(), args, args_types)
             else:
                 if self.__last_type is None:
                     file = self.__func.get_parent_func().get_file()
@@ -426,14 +484,17 @@ class ParserVisitor(NodeVisitor):
                     # New instance class call
                     self.__last_type = lang_type.get_obj_type(content.get_id())
                     self.__last_type.add_hint(hint.TypeHintRefIncr())
-                    self.__last_value = fly_obj.allocate_flyable_instance(self, content)
+                    self.__last_value = fly_obj.allocate_flyable_instance(
+                        self, content)
 
                     # Call the constructor
-                    caller.call_obj(self, "__init__", self.__last_value, self.__last_type, args, args_types, True)
+                    caller.call_obj(self, "__init__", self.__last_value,
+                                    self.__last_type, args, args_types, True)
 
                 elif isinstance(content, lang_func.LangFunc):
                     # Func call
-                    func_impl_to_call = adapter.adapt_func(content, args_types, self.__data, self.__parser)
+                    func_impl_to_call = adapter.adapt_func(
+                        content, args_types, self.__data, self.__parser)
                     if func_impl_to_call is not None:
                         if not func_impl_to_call.is_unknown():
                             self.__last_type = func_impl_to_call.get_return_type()
@@ -441,12 +502,14 @@ class ParserVisitor(NodeVisitor):
                             self.__parser.throw_error("Impossible to resolve function" +
                                                       func_impl_to_call.get_parent_func().get_name(), node.lineno,
                                                       node.col_offset)
-                        self.__last_value = self.__builder.call(func_impl_to_call.get_code_func(), args)
+                        self.__last_value = self.__builder.call(
+                            func_impl_to_call.get_code_func(), args)
                     else:
-                        self.__parser.throw_error("Function " + node.func.id + " not found", node.lineno,
+                        self.__parser.throw_error("Function " + node.func.id + " not found", node.lineno,  # type: ignore
                                                   node.end_col_offset)
                 else:
-                    self.__parser.throw_error("'" + name_call + "' unrecognized", node.lineno, node.end_col_offset)
+                    self.__parser.throw_error(
+                        "'" + name_call + "' unrecognized", node.lineno, node.end_col_offset)
         elif self.__last_type.is_python_obj() or self.__last_type.is_collection():  # Python call object
             self.__last_type, self.__last_value = caller.call_obj(self, name_call, self.__last_value, self.__last_type,
                                                                   args, args_types)
@@ -455,13 +518,16 @@ class ParserVisitor(NodeVisitor):
             func_to_call = _class.get_func(name_call)
             if func_to_call is None:
                 str_error = "Not method '" + name_call + "' found"
-                self.__parser.throw_error(str_error, node.lineno, node.end_col_offset)
+                self.__parser.throw_error(
+                    str_error, node.lineno, node.end_col_offset)
             else:
                 self.__last_type, self.__last_value = caller.call_obj(self, name_call, self.__last_value,
                                                                       self.__last_type, args, args_types)
         else:
-            str_error = "Call unrecognized with " + self.__last_type.to_str(self.__data)
-            self.__parser.throw_error(str_error, node.lineno, node.end_col_offset)
+            str_error = "Call unrecognized with " + \
+                self.__last_type.to_str(self.__data)
+            self.__parser.throw_error(
+                str_error, node.lineno, node.end_col_offset)
 
         self.__last_type.add_hint(hint.TypeHintRefIncr())
         ref_counter.ref_decr_multiple_incr(self, args_types, args)
@@ -483,36 +549,42 @@ class ParserVisitor(NodeVisitor):
             func_name = "__getitem__"
 
         if value_type.is_primitive():
-            self.__parser.throw_error("'[]' can't be used on a primitive type", node.lineno, node.end_col_offset)
+            self.__parser.throw_error(
+                "'[]' can't be used on a primitive type", node.lineno, node.end_col_offset)
         else:
-            self.__last_type, self.__last_value = caller.call_obj(self, func_name, value, value_type, args, args_types)
+            self.__last_type, self.__last_value = caller.call_obj(
+                self, func_name, value, value_type, args, args_types)
 
         ref_counter.ref_decr_multiple_incr(self, args_types, args)
 
     def visit_Slice(self, node: Slice) -> Any:
         if node.lower is not None:
             lower_type, lower_value = self.__visit_node(node.lower)
-            lower_type, lower_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, lower_value, lower_type)
+            lower_type, lower_value = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, lower_value, lower_type)
         else:
             lower_type = lang_type.get_none_type()
             lower_value = self.__builder.global_var(self.__code_gen.get_none())
 
         if node.upper is not None:
             upper_type, upper_value = self.__visit_node(node.upper)
-            upper_type, upper_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, upper_value, upper_type)
+            upper_type, upper_value = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, upper_value, upper_type)
         else:
             upper_type = lang_type.get_none_type()
             upper_value = self.__builder.global_var(self.__code_gen.get_none())
 
         if node.step is not None:
             step_type, step_value = self.__visit_node(node.step)
-            step_type, step_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, step_value, step_type)
+            step_type, step_value = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, step_value, step_type)
         else:
             step_type = lang_type.get_none_type()
             step_value = self.__builder.global_var(self.__code_gen.get_none())
 
         self.__last_type = lang_type.get_python_obj_type()
-        self.__last_value = gen_slice.py_slice_new(self, lower_value, upper_value, step_value)
+        self.__last_value = gen_slice.py_slice_new(
+            self, lower_value, upper_value, step_value)
 
     def visit_Delete(self, node: Delete) -> Any:
         for target in node.targets:
@@ -522,12 +594,14 @@ class ParserVisitor(NodeVisitor):
         if len(self.__out_blocks) > 0:
             self.__builder.br(self.__out_blocks[-1])
         else:
-            self.__parser.throw_error("'break' outside a loop", node.lineno, node.end_col_offset)
+            self.__parser.throw_error(
+                "'break' outside a loop", node.lineno, node.end_col_offset)
 
     def visit_Return(self, node: Return) -> Any:
         return_type, return_value = self.__visit_node(node.value)
 
-        if not hint.is_incremented_type(return_type):  # Need to increment if we return to be consistent to CPython
+        # Need to increment if we return to be consistent to CPython
+        if not hint.is_incremented_type(return_type):
             ref_counter.ref_incr(self.__builder, return_type, return_value)
 
         return_type.clear_hints()
@@ -547,32 +621,35 @@ class ParserVisitor(NodeVisitor):
                 # We need to re-visit the function since we change the return type
                 self.__func.set_return_type(lang_type.get_python_obj_type())
                 self.__reset_visit = True
-            conv_type, conv_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, return_value, return_type)
+            conv_type, conv_value = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, return_value, return_type)
             self.__builder.ret(conv_value)
 
     def visit_Constant(self, node: Constant) -> Any:
         if isinstance(node.value, bool):
-            self.__last_type = get_bool_type()
+            self.__last_type = lang_type.get_bool_type()
             self.__last_type.add_hint(hint.TypeHintConstBool(node.value))
             self.__last_value = self.__builder.const_int1(int(node.value))
         elif isinstance(node.value, int):
-            self.__last_type = get_int_type()
+            self.__last_type = lang_type.get_int_type()
             self.__last_value = self.__builder.const_int64(node.value)
             self.__last_type.add_hint(hint.TypeHintConstInt(node.value))
         elif isinstance(node.value, float):
-            self.__last_type = get_dec_type()
+            self.__last_type = lang_type.get_dec_type()
             self.__last_type.add_hint(hint.TypeHintConstDec(node.value))
             self.__last_value = self.__builder.const_float64(node.value)
         elif isinstance(node.value, str):
-            self.__last_type = get_python_obj_type()
+            self.__last_type = lang_type.get_python_obj_type()
             self.__last_type.add_hint(hint.TypeHintConstStr(node.value))
-            self.__last_value = self.__builder.global_var(self.__code_gen.get_or_insert_str(node.value))
+            self.__last_value = self.__builder.global_var(
+                self.__code_gen.get_or_insert_str(node.value))
             self.__last_value = self.__builder.load(self.__last_value)
         elif node.value is None:
-            self.__last_type = get_none_type()
+            self.__last_type = lang_type.get_none_type()
             self.__last_value = self.__builder.const_int32(0)
         else:
-            self.__parser.throw_error("Undefined '" + node.id + "'", node.lineno, node.col_offset)
+            self.__parser.throw_error(
+                "Undefined '" + node.id + "'", node.lineno, node.col_offset)  # type: ignore
 
     def visit_IfExp(self, node: IfExp) -> Any:
         true_cond = self.__builder.create_block()
@@ -593,16 +670,20 @@ class ParserVisitor(NodeVisitor):
         self.__builder.set_insert_block(false_cond)
         false_type, false_value = self.__visit_node(node.orelse)
 
-        common_type = lang_type.get_most_common_type(self.__data, true_type, false_type)
-        new_var = self.generate_entry_block_var(common_type.to_code_type(self.__code_gen))
+        common_type = lang_type.get_most_common_type(
+            self.__data, true_type, false_type)
+        new_var = self.generate_entry_block_var(
+            common_type.to_code_type(self.__code_gen))
 
         self.__builder.set_insert_block(true_cond)
-        true_value = self.__code_gen.convert_type(self.__builder, true_type, true_value, common_type)
+        true_value = self.__code_gen.convert_type(
+            self.__builder, true_type, true_value, common_type)
         self.__builder.store(true_value, new_var)
         self.__builder.br(continue_cond)
 
         self.__builder.set_insert_block(false_cond)
-        false_value = self.__code_gen.convert_type(self.__builder, false_type, false_value, common_type)
+        false_value = self.__code_gen.convert_type(
+            self.__builder, false_type, false_value, common_type)
         self.__builder.store(false_value, new_var)
         self.__builder.br(continue_cond)
 
@@ -615,12 +696,14 @@ class ParserVisitor(NodeVisitor):
         block_continue = self.__builder.create_block()
 
         # If there is relevant info
-        has_other_block = node.orelse is not None or (isinstance(node.orelse, list) and len(node.orelse) > 0)
+        has_other_block = node.orelse is not None or (
+            isinstance(node.orelse, list) and len(node.orelse) > 0)
         if has_other_block:
             other_block = self.__builder.create_block()
 
         cond_type_test, cond_value_test = self.__visit_node(node.test)
-        cond_type, cond_value = cond.value_to_cond(self, cond_type_test, cond_value_test)
+        cond_type, cond_value = cond.value_to_cond(
+            self, cond_type_test, cond_value_test)
 
         ref_counter.ref_decr_incr(self, cond_type_test, cond_value_test)
         ref_counter.ref_decr_incr(self, cond_type, cond_value)
@@ -663,7 +746,8 @@ class ParserVisitor(NodeVisitor):
 
         # Setup the while loop content
         self.__builder.set_insert_block(block_while_in)
-        self.__out_blocks.append(block_continue)  # In case of a break we want to jump after the while loop
+        # In case of a break we want to jump after the while loop
+        self.__out_blocks.append(block_continue)
         self.__visit_node(node.body)
         self.__out_blocks.pop()
         self.__builder.br(block_cond)
@@ -684,18 +768,23 @@ class ParserVisitor(NodeVisitor):
             with_types.append(type)
             if type.is_obj() or type.is_python_obj():
                 if with_item.optional_vars is not None:
-                    with_var = self.__func.get_context().add_var(str(with_item.optional_vars.id), type)
+                    with_var = self.__func.get_context().add_var(
+                        str(with_item.optional_vars.id), type)  # type: ignore
                     all_vars_with.append(with_var)
                     self.__builder.store(value, with_var.get_code_gen_value())
                 else:
                     all_vars_with.append(None)
 
                 # def __exit__(self, exc_type, exc_value, traceback)
-                exit_args_type = [type] + ([lang_type.get_python_obj_type()] * 3)
-                caller.call_obj(self, "__enter__", value, type, [value], [type])
+                exit_args_type = [type] + \
+                    ([lang_type.get_python_obj_type()] * 3)
+                caller.call_obj(self, "__enter__", value,
+                                type, [value], [type])
 
-                exit_values = [value] + ([self.__builder.const_null(code_type.get_int8_ptr())] * 3)
-                caller.call_obj(self, "__exit__", value, type, exit_values, exit_args_type)
+                exit_values = [
+                    value] + ([self.__builder.const_null(code_type.get_int8_ptr())] * 3)
+                caller.call_obj(self, "__exit__", value, type,
+                                exit_values, exit_args_type)
             else:
                 self.__parser.throw_error("Type " + type.to_str(self.__data) +
                                           " can't be used in a with statement", node.lineno, node.end_col_offset)
@@ -707,27 +796,31 @@ class ParserVisitor(NodeVisitor):
                 var.set_use(False)
 
     def visit_comprehension(self, node: comprehension) -> Any:
-        target_name = node.target.id
+        target_name = node.target.id  # type: ignore
         iter_type, iter_value = self.__visit_node(node.iter)
         target_var = self.__func.get_context().add_var(target_name, iter_type)
-        alloca_value = self.generate_entry_block_var(iter_type.to_code_type(self.__code_gen))
+        alloca_value = self.generate_entry_block_var(
+            iter_type.to_code_type(self.__code_gen))
         target_var.set_code_gen_value(alloca_value)
         self.__last_type, self.__last_value = caller.call_obj(self, "__iter__", iter_value, iter_type, [iter_value],
                                                               [iter_type])
 
     def visit_ListComp(self, node: ListComp) -> Any:
-        result_array = gen_list.instanciate_python_list(self.__code_gen, self.__builder, self.__builder.const_int64(0))
+        result_array = gen_list.instanciate_python_list(
+            self.__code_gen, self.__builder, self.__builder.const_int64(0))
 
         block_continue = self.__builder.create_block()
         prev_for_block = None
 
         for i, e in enumerate(node.generators):
-            name = e.target.id
+            name = e.target.id  # type: ignore
             iter_type, iter_value = self.__visit_node(e.iter)
             new_var = self.__func.get_context().add_var(name, iter_type)
-            alloca_value = self.generate_entry_block_var(iter_type.to_code_type(self.__code_gen))
+            alloca_value = self.generate_entry_block_var(
+                iter_type.to_code_type(self.__code_gen))
             new_var.set_code_gen_value(alloca_value)
-            iterable_type, iterator = caller.call_obj(self, "__iter__", iter_value, iter_type, [], [])
+            iterable_type, iterator = caller.call_obj(
+                self, "__iter__", iter_value, iter_type, [], [])
 
             block_for = self.__builder.create_block()
             block_for_in = self.__builder.create_block()
@@ -735,11 +828,13 @@ class ParserVisitor(NodeVisitor):
             self.__builder.br(block_for)
             self.__builder.set_insert_block(block_for)
 
-            next_type, next_value = caller.call_obj(self, "__next__", iterator, iterable_type, [], [])
+            next_type, next_value = caller.call_obj(
+                self, "__next__", iterator, iterable_type, [], [])
 
             self.__builder.store(next_value, new_var.get_code_gen_value())
 
-            null_ptr = self.__builder.const_null(code_type.get_py_obj_ptr(self.__code_gen))
+            null_ptr = self.__builder.const_null(
+                lang_type.code_type.get_py_obj_ptr(self.__code_gen))
             excp.py_runtime_clear_error(self.__code_gen, self.__builder)
 
             test = self.__builder.eq(next_value, null_ptr)
@@ -756,14 +851,17 @@ class ParserVisitor(NodeVisitor):
             for j, test in enumerate(e.ifs):
                 block_cond = self.__builder.create_block()
                 cond_type, cond_value = self.__visit_node(test)
-                cond_type, cond_value = cond.value_to_cond(self, cond_type, cond_value)
+                cond_type, cond_value = cond.value_to_cond(
+                    self, cond_type, cond_value)
                 self.__builder.cond_br(cond_value, block_cond, block_for)
                 self.__builder.set_insert_block(block_cond)
 
             if i == len(node.generators) - 1:
                 elt_type, elt_value = self.__visit_node(node.elt)
-                obj_to_list = runtime.value_to_pyobj(self.__code_gen, self.__builder, elt_value, elt_type)
-                gen_list.python_list_append(self, result_array, lang_type.get_python_obj_type(), obj_to_list)
+                obj_to_list = runtime.value_to_pyobj(
+                    self.__code_gen, self.__builder, elt_value, elt_type)
+                gen_list.python_list_append(
+                    self, result_array, lang_type.get_python_obj_type(), obj_to_list)
                 self.__builder.br(block_for)
 
             prev_for_block = block_for
@@ -784,7 +882,8 @@ class ParserVisitor(NodeVisitor):
             if common_type is None:
                 common_type = type
             else:
-                common_type = lang_type.get_most_common_type(self.__data, common_type, type)
+                common_type = lang_type.get_most_common_type(
+                    self.__data, common_type, type)
 
         array = gen_list.instanciate_python_list(self.__code_gen, self.__builder,
                                                  self.__builder.const_int64(len(elts_values)))
@@ -799,7 +898,8 @@ class ParserVisitor(NodeVisitor):
         self.__last_type.add_hint(hint.TypeHintRefIncr())
 
         for i, e in enumerate(elts_values):
-            py_obj_type, py_obj = runtime.value_to_pyobj(self.__code_gen, self.__builder, e, elts_types[i])
+            py_obj_type, py_obj = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, e, elts_types[i])
             index = self.__builder.const_int64(i)
             gen_list.python_list_set(self, self.__last_value, index, py_obj)
 
@@ -820,24 +920,29 @@ class ParserVisitor(NodeVisitor):
         self.__last_type.add_hint(hint.TypeHintRefIncr())
 
         for i, e in enumerate(elts_values):
-            py_obj_type, py_obj = runtime.value_to_pyobj(self.__code_gen, self.__builder, e, elts_types[i])
+            py_obj_type, py_obj = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, e, elts_types[i])
             ref_counter.ref_incr(self.__builder, py_obj_type, py_obj)
-            gen_tuple.python_tuple_set_unsafe(self, self.__last_value, i, py_obj)
+            gen_tuple.python_tuple_set_unsafe(
+                self, self.__last_value, i, py_obj)
 
     def visit_SetComp(self, node: SetComp) -> Any:
-        null_value = self.__builder.const_null(code_type.get_py_obj_ptr(self.__code_gen))
+        null_value = self.__builder.const_null(
+            lang_type.code_type.get_py_obj_ptr(self.__code_gen))
         result_set = gen_set.instanciate_python_set(self, null_value)
 
         block_continue = self.__builder.create_block()
         prev_for_block = None
 
         for i, e in enumerate(node.generators):
-            name = e.target.id
+            name = e.target.id  # type: ignore
             iter_type, iter_value = self.__visit_node(e.iter)
             new_var = self.__func.get_context().add_var(name, iter_type)
-            alloca_value = self.generate_entry_block_var(iter_type.to_code_type(self.__code_gen))
+            alloca_value = self.generate_entry_block_var(
+                iter_type.to_code_type(self.__code_gen))
             new_var.set_code_gen_value(alloca_value)
-            iterable_type, iterator = caller.call_obj(self, "__iter__", iter_value, iter_type, [], [])
+            iterable_type, iterator = caller.call_obj(
+                self, "__iter__", iter_value, iter_type, [], [])
 
             block_for = self.__builder.create_block()
             block_for_in = self.__builder.create_block()
@@ -845,11 +950,13 @@ class ParserVisitor(NodeVisitor):
             self.__builder.br(block_for)
             self.__builder.set_insert_block(block_for)
 
-            next_type, next_value = caller.call_obj(self, "__next__", iterator, iterable_type, [], [])
+            next_type, next_value = caller.call_obj(
+                self, "__next__", iterator, iterable_type, [], [])
 
             self.__builder.store(next_value, new_var.get_code_gen_value())
 
-            null_ptr = self.__builder.const_null(code_type.get_py_obj_ptr(self.__code_gen))
+            null_ptr = self.__builder.const_null(
+                lang_type.code_type.get_py_obj_ptr(self.__code_gen))
             excp.py_runtime_clear_error(self.__code_gen, self.__builder)
 
             test = self.__builder.eq(next_value, null_ptr)
@@ -866,13 +973,15 @@ class ParserVisitor(NodeVisitor):
             for j, test in enumerate(e.ifs):
                 block_cond = self.__builder.create_block()
                 cond_type, cond_value = self.__visit_node(test)
-                cond_type, cond_value = cond.value_to_cond(self, cond_type, cond_value)
+                cond_type, cond_value = cond.value_to_cond(
+                    self, cond_type, cond_value)
                 self.__builder.cond_br(cond_value, block_cond, block_for)
                 self.__builder.set_insert_block(block_cond)
 
             if i == len(node.generators) - 1:
                 elt_type, elt_value = self.__visit_node(node.elt)
-                obj_to_set = runtime.value_to_pyobj(self.__code_gen, self.__builder, elt_value, elt_type)
+                obj_to_set = runtime.value_to_pyobj(
+                    self.__code_gen, self.__builder, elt_value, elt_type)
                 gen_set.python_set_add(self, result_set, obj_to_set)
                 self.__builder.br(block_for)
 
@@ -884,12 +993,14 @@ class ParserVisitor(NodeVisitor):
 
     def visit_Set(self, node: Set) -> Any:
         set_type = lang_type.get_set_of_python_obj_type()
-        set_type.add_dim(LangType.Dimension.SET)
-        null_value = self.__builder.const_null(code_type.get_py_obj_ptr(self.__code_gen))
+        set_type.add_dim(lang_type.LangType.Dimension.SET)
+        null_value = self.__builder.const_null(
+            lang_type.code_type.get_py_obj_ptr(self.__code_gen))
         new_set = gen_set.instanciate_python_set(self, null_value)
         for e in node.elts:
             type, value = self.__visit_node(e)
-            py_obj = runtime.value_to_pyobj(self.__code_gen, self.__builder, value, type)
+            py_obj = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, value, type)
             gen_set.python_set_add(self, new_set, py_obj)
         self.__last_value = new_set
         self.__last_type = set_type
@@ -902,12 +1013,14 @@ class ParserVisitor(NodeVisitor):
         prev_for_block = None
 
         for i, e in enumerate(node.generators):
-            name = e.target.id
+            name = e.target.id  # type: ignore
             iter_type, iter_value = self.__visit_node(e.iter)
             new_var = self.__func.get_context().add_var(name, iter_type)
-            alloca_value = self.generate_entry_block_var(iter_type.to_code_type(self.__code_gen))
+            alloca_value = self.generate_entry_block_var(
+                iter_type.to_code_type(self.__code_gen))
             new_var.set_code_gen_value(alloca_value)
-            iterable_type, iterator = caller.call_obj(self, "__iter__", iter_value, iter_type, [], [])
+            iterable_type, iterator = caller.call_obj(
+                self, "__iter__", iter_value, iter_type, [], [])
 
             block_for = self.__builder.create_block()
             block_for_in = self.__builder.create_block()
@@ -915,11 +1028,13 @@ class ParserVisitor(NodeVisitor):
             self.__builder.br(block_for)
             self.__builder.set_insert_block(block_for)
 
-            next_type, next_value = caller.call_obj(self, "__next__", iterator, iterable_type, [], [])
+            next_type, next_value = caller.call_obj(
+                self, "__next__", iterator, iterable_type, [], [])
 
             self.__builder.store(next_value, new_var.get_code_gen_value())
 
-            null_ptr = self.__builder.const_null(code_type.get_py_obj_ptr(self.__code_gen))
+            null_ptr = self.__builder.const_null(
+                lang_type.code_type.get_py_obj_ptr(self.__code_gen))
             excp.py_runtime_clear_error(self.__code_gen, self.__builder)
 
             test = self.__builder.eq(next_value, null_ptr)
@@ -936,16 +1051,20 @@ class ParserVisitor(NodeVisitor):
             for j, test in enumerate(e.ifs):
                 block_cond = self.__builder.create_block()
                 cond_type, cond_value = self.__visit_node(test)
-                cond_type, cond_value = cond.value_to_cond(self, cond_type, cond_value)
+                cond_type, cond_value = cond.value_to_cond(
+                    self, cond_type, cond_value)
                 self.__builder.cond_br(cond_value, block_cond, block_for)
                 self.__builder.set_insert_block(block_cond)
 
             if i == len(node.generators) - 1:
                 key_type, key_value = self.__visit_node(node.key)
                 value_type, value_value = self.__visit_node(node.value)
-                obj_key = runtime.value_to_pyobj(self.__code_gen, self.__builder, key_value, key_type)
-                obj_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, value_value, value_type)
-                gen_dict.python_dict_set_item(self, result_dict, obj_key, obj_value)
+                obj_key = runtime.value_to_pyobj(
+                    self.__code_gen, self.__builder, key_value, key_type)
+                obj_value = runtime.value_to_pyobj(
+                    self.__code_gen, self.__builder, value_value, value_type)
+                gen_dict.python_dict_set_item(
+                    self, result_dict, obj_key, obj_value)
                 self.__builder.br(block_for)
 
             prev_for_block = block_for
@@ -961,10 +1080,13 @@ class ParserVisitor(NodeVisitor):
             key_type, key_value = self.__visit_node(node.keys[i])
             value_type, value_value = self.__visit_node(node.values[i])
 
-            key_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, key_value, key_type)
-            value_value = runtime.value_to_pyobj(self.__code_gen, self.__builder, value_value, value_type)
+            key_value = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, key_value, key_type)
+            value_value = runtime.value_to_pyobj(
+                self.__code_gen, self.__builder, value_value, value_type)
 
-            gen_dict.python_dict_set_item(self, new_dict, key_value, value_value)
+            gen_dict.python_dict_set_item(
+                self, new_dict, key_value, value_value)
             self.__last_value = None
         self.__last_value = new_dict
         self.__last_type = lang_type.get_python_obj_type()
@@ -975,7 +1097,8 @@ class ParserVisitor(NodeVisitor):
         content_try.parse_try(self, node)
 
     def visit_Raise(self, node: Raise) -> Any:
-        self.__func.set_can_raise(True)  # There is a raise so it can raise an exception
+        # There is a raise so it can raise an exception
+        self.__func.set_can_raise(True)
         self.__last_type, self.__last_value = self.__visit_node(node.exc)
         if node.cause is not None:
             self.__visit_node(node.cause)
@@ -993,7 +1116,8 @@ class ParserVisitor(NodeVisitor):
         self.__func.set_can_raise(True)
         msg_type, msg_value = self.__visit_node(node.msg)
 
-        excp.raise_assert_error(self, runtime.value_to_pyobj(self.__code_gen, self.__builder, msg_value, msg_type))
+        excp.raise_assert_error(self, runtime.value_to_pyobj(
+            self.__code_gen, self.__builder, msg_value, msg_type))
 
         excp.raise_index_error(self)
         excp.handle_raised_excp(self)
@@ -1018,7 +1142,8 @@ class ParserVisitor(NodeVisitor):
             file = self.__data.get_file(e.name)
             if file is None:  # Python module
                 module_type = lang_type.get_python_obj_type()  # A Python module
-                content = gen_module.import_py_module(self.__code_gen, self.__builder, e.name)
+                content = gen_module.import_py_module(
+                    self.__code_gen, self.__builder, e.name)
             else:  # Flyable module
                 module_type = lang_type.get_module_type(file.get_id())
                 content = self.__builder.const_int32(file.get_id())
@@ -1028,7 +1153,8 @@ class ParserVisitor(NodeVisitor):
 
             new_var = self.__func.get_context().add_var(var_name, module_type)
             if self.__func.get_parent_func().is_global():
-                new_global_var = gen.GlobalVar("@flyable@global@module@" + var_name, module_code_type)
+                new_global_var = gen.GlobalVar(
+                    "@flyable@global@module@" + var_name, module_code_type)
                 new_var.set_global(True)
                 new_var.set_code_gen_value(new_global_var)
                 self.__code_gen.add_global_var(new_global_var)
@@ -1046,7 +1172,8 @@ class ParserVisitor(NodeVisitor):
             file = self.__data.get_file(e.name)
             if file is None:  # Python module
                 module_type = lang_type.get_python_obj_type()  # A Python module
-                content = gen_module.import_py_module(self.__code_gen, self.__builder, var_name)
+                content = gen_module.import_py_module(
+                    self.__code_gen, self.__builder, var_name)
             else:  # Flyable module
                 module_type = lang_type.get_module_type(file.get_id())
                 content = self.__builder.const_int32(file.get_id())
@@ -1056,7 +1183,8 @@ class ParserVisitor(NodeVisitor):
 
             new_var = self.__func.get_context().add_var(var_name, module_type)
             if self.__func.get_parent_func().is_global():
-                new_global_var = gen.GlobalVar("@flyable@global@module@" + var_name, module_code_type)
+                new_global_var = gen.GlobalVar(
+                    "@flyable@global@module@" + var_name, module_code_type)
                 new_var.set_global(True)
                 new_var.set_code_gen_value(new_global_var)
                 self.__code_gen.add_global_var(new_global_var)
@@ -1104,11 +1232,12 @@ class ParserVisitor(NodeVisitor):
         self.__builder.set_insert_block(self.__entry_block)
         new_alloca = self.__builder.alloca(code_type)
         if need_to_be_nulled:
-            self.__builder.store(self.__builder.const_null(code_type), new_alloca)
+            self.__builder.store(
+                self.__builder.const_null(code_type), new_alloca)
         self.__builder.set_insert_block(current_block)
         return new_alloca
 
-    def add_except_block(self, block):
+    def add_except_block(self, block: CodeFunc.CodeBlock):
         self.__exception_blocks.append(block)
 
     def pop_except_block(self):
@@ -1138,8 +1267,10 @@ class ParserVisitor(NodeVisitor):
             current = 0
             for i in range(args_count - len(default_args), args_count):
                 arg_type, arg_value = self.__visit_node(default_args[current])
-                new_var = self.__func.get_context().add_var(self.__func.get_parent_func().get_arg(i).arg, arg_type)
-                new_var_alloca = self.generate_entry_block_var(arg_type.to_code_type(self.__code_gen))
+                new_var = self.__func.get_context().add_var(
+                    self.__func.get_parent_func().get_arg(i).arg, arg_type)
+                new_var_alloca = self.generate_entry_block_var(
+                    arg_type.to_code_type(self.__code_gen))
                 self.__builder.store(arg_value, new_var_alloca)
                 new_var.set_code_gen_value(new_var_alloca)
                 current += 1
@@ -1155,9 +1286,9 @@ class ParserVisitor(NodeVisitor):
 
     def __reset_info(self):
         self.__mode = ParserVisitMode.GENERAL
-        self.__assign_type: LangType = LangType()
+        self.__assign_type: LangType = lang_type.LangType()
         self.__assign_value = None
-        self.__last_type: LangType = LangType()
+        self.__last_type: LangType = lang_type.LangType()
         self.__last_value = None
         self.__current_node = None
         self.__reset_visit = False

@@ -1,10 +1,15 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flyable.data.lang_file import LangFile
+    from flyable.data.lang_type import LangType
+
 
 import ast
-import flyable.data.lang_file as lang_file
 
 from flyable.data.lang_func_impl import LangFuncImpl
-import flyable.data.lang_type as type
+import flyable.data.lang_type as l_type
 
 
 class LangFunc:
@@ -47,7 +52,7 @@ class LangFunc:
     def get_impl(self, index):
         return self.__impls[index]
 
-    def set_file(self, file: lang_file.LangFile):
+    def set_file(self, file: LangFile):
         self.__file = file
 
     def get_file(self):
@@ -59,7 +64,7 @@ class LangFunc:
     def impls_iter(self):
         return iter(self.__impls)
 
-    def find_impl_by_signature(self, args_type: list[type.LangType]):
+    def find_impl_by_signature(self, args_type: list[LangType]):
         for func_impl in self.__impls:
             if func_impl.is_unknown() or func_impl.get_args_count() != len(args_type):  # Same arguments count
                 continue
@@ -133,4 +138,4 @@ class LangFunc:
         self.__impls[0].set_parent_func(self)
         self.__impls[0].set_unknown(True)
         for e in self.args_iter():
-            self.get_unknown_impl().add_arg(type.get_unknown_type())
+            self.get_unknown_impl().add_arg(l_type.get_unknown_type())

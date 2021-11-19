@@ -1,4 +1,12 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from flyable.code_gen.code_gen import CodeFunc
+    from flyable.code_gen.code_type import CodeType
+    from flyable.code_gen.code_writer import CodeWriter
+
 import flyable.code_gen.code_gen as gen
 
 
@@ -8,10 +16,10 @@ class CodeBuilder:
     It mimics the LLVM IRBuilder API but with some extra type abstractions.
     """
 
-    def __init__(self, func):
-        self.__current_block = None
-        self.__func = func
-        self.__writer = None
+    def __init__(self, func: CodeFunc):
+        self.__current_block: CodeFunc.CodeBlock = None
+        self.__func: CodeFunc = func
+        self.__writer: CodeWriter = None
 
     def to_bytes(self):
         return self.__writer.to_bytes()
@@ -19,7 +27,7 @@ class CodeBuilder:
     def create_block(self):
         return self.__gen_block()
 
-    def set_insert_block(self, block):
+    def set_insert_block(self, block: CodeFunc.CodeBlock):
         self.__writer = block.get_writer()
         self.__current_block = block
 
@@ -74,13 +82,13 @@ class CodeBuilder:
     def load(self, value):
         return self.__make_op(101, value)
 
-    def br(self, block):
+    def br(self, block: CodeFunc.CodeBlock):
         self.__writer.add_int32(150)
         self.__writer.add_int32(block.get_id())
         self.__current_block.add_br_block(block)
         self.__writer.lock()
 
-    def cond_br(self, value, block_true, block_false):
+    def cond_br(self, value: int, block_true: CodeFunc.CodeBlock, block_false: CodeFunc.CodeBlock):
         self.__writer.add_int32(151)
         self.__writer.add_int32(value)
         self.__writer.add_int32(block_true.get_id())
@@ -89,10 +97,10 @@ class CodeBuilder:
         self.__current_block.add_br_block(block_false)
         self.__writer.lock()
 
-    def gep(self, value, first_index, second_index):
+    def gep(self, value: int, first_index: int, second_index: int):
         return self.__make_op(152, value, first_index, second_index)
 
-    def gep2(self, value, type, array_indices):
+    def gep2(self, value: int, type: CodeType, array_indices: list[int]):
         self.__writer.add_int32(153)
         type.write_to_code(self.__writer)
         self.__writer.add_int32(value)
@@ -134,24 +142,24 @@ class CodeBuilder:
         self.__writer.add_float64(value)
         return self.__gen_value()
 
-    def const_null(self, type):
+    def const_null(self, type: CodeType):
         self.__writer.add_int32(1006)
         type.write_to_code(self.__writer)
         return self.__gen_value()
 
-    def ptr_cast(self, value, type):
+    def ptr_cast(self, value, type: CodeType):
         self.__writer.add_int32(1010)
         self.__writer.add_int32(value)
         type.write_to_code(self.__writer)
         return self.__gen_value()
 
-    def int_cast(self, value, type):
+    def int_cast(self, value, type: CodeType):
         self.__writer.add_int32(1011)
         self.__writer.add_int32(value)
         type.write_to_code(self.__writer)
         return self.__gen_value()
 
-    def float_cast(self, value, type):
+    def float_cast(self, value, type: CodeType):
         self.__writer.add_int32(1012)
         self.__writer.add_int32(value)
         type.write_to_code(self.__writer)
@@ -199,7 +207,7 @@ class CodeBuilder:
     def global_var(self, var):
         return self.__make_op(3000, var.get_id())
 
-    def global_str(self, value):
+    def global_str(self, value: str):
         self.__writer.add_int32(3001)
         self.__writer.add_str(value)
         return self.__gen_value()
@@ -233,8 +241,7 @@ class CodeBuilder:
         return new_value
 
     def __gen_block(self):
-        result = self.__func.add_block()
-        return result
+        return self.__func.add_block()
 
     def __make_op(self, id: int, *values: Any) -> Any:
         """

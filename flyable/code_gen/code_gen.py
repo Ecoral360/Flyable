@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import platform
+from collections import OrderedDict
+import enum
 
 import flyable.code_gen.code_writer as _writer
 from flyable.code_gen.code_writer import CodeWriter
-from flyable.code_gen.code_builder import CodeBuilder
+import flyable.code_gen.code_builder as code_builder
 from flyable.code_gen.code_type import CodeType
 import flyable.code_gen.code_type as code_type
 import flyable.code_gen.runtime as runtime
 import flyable.code_gen.library_loader as loader
 import flyable.data.lang_type as lang_type
 import flyable.code_gen.module as gen_module
-from collections import OrderedDict
-import enum
 import flyable.code_gen.ref_counter as ref_counter
 from flyable.data.lang_func_impl import LangFuncImpl
 
@@ -110,11 +112,11 @@ class CodeFunc:
         use to generate IR
         """
 
-        def __init__(self, id=0):
-            self.__code_writer = CodeWriter()
-            self.__id = id
-            self.__has_return = False
-            self.__br_blocks = []
+        def __init__(self, id: int = 0):
+            self.__code_writer: CodeWriter = CodeWriter()
+            self.__id: int = id
+            self.__has_return: bool = False
+            self.__br_blocks: list[CodeFunc.CodeBlock] = []
 
         def get_id(self):
             return self.__id
@@ -122,17 +124,17 @@ class CodeFunc:
         def get_writer(self):
             return self.__code_writer
 
-        def set_has_return(self, ret):
+        def set_has_return(self, ret: bool):
             self.__has_return = ret
 
         def has_return(self):
             return self.__has_return
 
-        def write_to_code(self, writer):
+        def write_to_code(self, writer: CodeWriter):
             writer.add_str(self.get_name())
             self.__code_writer.write_to_code(writer)
 
-        def add_br_block(self, block):
+        def add_br_block(self, block: CodeFunc.CodeBlock):
             self.__br_blocks.append(block)
 
         def has_br_block(self):
@@ -157,8 +159,8 @@ class CodeFunc:
         self.__name = name
         self.__args = []
         self.__return_type = CodeType()
-        self.__blocks = []
-        self.__builder = CodeBuilder(self)
+        self.__blocks: list[CodeFunc.CodeBlock] = []
+        self.__builder = code_builder.CodeBuilder(self)
 
     def set_linkage(self, link):
         self.__linkage = link
@@ -568,7 +570,7 @@ class CodeGen:
             raise NotImplemented(platform.uname()[0] + " not supported")
 
         main_func = self.get_or_create_func(main_name, code_type.get_int32(), [], Linkage.EXTERNAL)
-        builder = CodeBuilder(main_func)
+        builder = code_builder.CodeBuilder(main_func)
         entry_block = builder.create_block()
         builder.set_insert_block(entry_block)
 

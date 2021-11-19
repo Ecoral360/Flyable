@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import struct
 
 
@@ -8,7 +10,7 @@ class CodeWriter:
 
     def __init__(self):
         self.__lock = False  # To allow a block any writing on the data
-        self.__data = bytearray()
+        self.__data: bytearray = bytearray()
 
     def to_bytes(self):
         return self.__data.to_bytes()
@@ -31,16 +33,18 @@ class CodeWriter:
             bytes = bytearray(struct.pack("d", value))
             self.__data += bytes
 
-    def add_str(self, value):
-        if not self.is_lock():
-            self.add_int32(len(value))
-            self.__data += str.encode(value)
+    def add_str(self, value: str):
+        if self.is_lock():
+            return
+        self.add_int32(len(value))
+        self.__data += str.encode(value)
 
-    def add_bytes(self, bytes):
-        if not self.is_lock():
-            self.__data += bytes
+    def add_bytes(self, bytes: bytearray):
+        if self.is_lock():
+            return
+        self.__data += bytes
 
-    def write_to_code(self, writer):
+    def write_to_code(self, writer: CodeWriter):
         writer.add_int32(len(self.__data))
         writer.add_bytes(self.__data)
 

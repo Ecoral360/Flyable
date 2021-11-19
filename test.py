@@ -3,6 +3,7 @@ from flyableTests.test import Test
 
 #-------------------- setup, run and clean up for the tests --------------------#
 
+
 def setup_test(file: str, prefix: str = "test"):
     lines_before_test: list[str]
     with open(f"flyableTests/tests/{file}", "r") as f:
@@ -10,13 +11,15 @@ def setup_test(file: str, prefix: str = "test"):
 
     with open(f"flyableTests/tests/{prefix}-{file}", "w+") as f:
         # we need to add an input at the end of the file because otherwise,
-        # it won't register the output in stdout 
+        # it won't register the output in stdout
         # (idk why, but this is how i got it working)
         f.writelines(lines_before_test + ["\ninput()"])
 
     def clean_up(dir: str):
-        os.remove(f"{dir}/a.exe")
-        os.remove(f"{dir}/output.o")
+        if os.path.exists(f"{dir}/a.exe"):
+            os.remove(f"{dir}/a.exe")
+        if os.path.exists(f"{dir}/output.o"):
+            os.remove(f"{dir}/output.o")
         os.remove(f"flyableTests/tests/{prefix}-{file}")
 
     return clean_up
@@ -24,7 +27,7 @@ def setup_test(file: str, prefix: str = "test"):
 
 def run_test(file: str, *expected_outputs: str, prefix: str = "test"):
     output_dir = "flyableTests/build-test"
-    
+
     test = Test()
     test.setup(output_dir=output_dir, source_dir="flyableTests/tests")
 
@@ -38,8 +41,8 @@ def run_test(file: str, *expected_outputs: str, prefix: str = "test"):
 
 #-------------------- Add your tests here --------------------#
 
-def test_arithmetic():
-    run_test("arithmetic.py")
+# def test_arithmetic():
+#    run_test("arithmetic.py")
 
 
 def test_cond():
@@ -48,6 +51,14 @@ def test_cond():
 
 def test_fibo():
     run_test("fibonacci.py", "55")
+
+
+def test_assign():
+    run_test("assign.py", "3", "ohoh", "True", "18", "False")
+
+
+def test_multi_assign():
+    run_test("multi_assign.py", "1", "None")
 
 
 """

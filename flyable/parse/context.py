@@ -1,6 +1,11 @@
-from typing import Union
-from flyable.data.lang_type import LangType
-from flyable.parse.variable import Variable
+from __future__ import annotations
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from flyable.data.lang_type import LangType
+    from flyable.parse.variable import Variable
+
+import flyable.parse.variable as var
 
 
 class Context:
@@ -9,7 +14,7 @@ class Context:
         self.__vars: list[Variable] = []
 
     def add_var(self, name: str, type: LangType):
-        new_var = Variable(len(self.__vars))
+        new_var = var.Variable(len(self.__vars))
         new_var.set_name(name)
         new_var.set_type(type)
         self.__vars.append(new_var)
@@ -66,5 +71,3 @@ class Context:
 
     def get_vars_count(self):
         return len(self.__vars)
-
-

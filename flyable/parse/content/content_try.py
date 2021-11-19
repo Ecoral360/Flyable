@@ -1,9 +1,11 @@
+import ast
 import flyable.code_gen.exception as excp
 import flyable.code_gen.fly_obj as fly_obj
 import flyable.code_gen.code_type as code_type
+from flyable.parse.parser_visitor import ParserVisitor
 
 
-def parse_try(visitor, node):
+def parse_try(visitor: ParserVisitor, node):
     continue_block = visitor.get_builder().create_block()
     excp_block = visitor.get_builder().create_block()
     excp_not_found_block = visitor.get_builder().create_block()
@@ -28,7 +30,8 @@ def parse_try(visitor, node):
 
     visitor.get_builder().br(handlers_cond_block[0])
 
-    parse_handlers(visitor, node, handlers_cond_block, handlers_block, continue_block, excp_not_found_block)
+    parse_handlers(visitor, node, handlers_cond_block,
+                   handlers_block, continue_block, excp_not_found_block)
 
     # self.__visit_node(node.finalbody)
 
@@ -41,16 +44,21 @@ def parse_try(visitor, node):
 
 
 def parse_handlers(visitor, try_node, handlers_cond_block, handlers_block, continue_block, excp_not_found_block):
-    for i, handler in enumerate(try_node.handlers):  # For each exception statement
+    # For each exception statement
+    for i, handler in enumerate(try_node.handlers):
         visitor.reset_last()
         visitor.get_builder().set_insert_block(handlers_cond_block[i])
-        excp_value = excp.py_runtime_get_excp(visitor.get_code_gen(), visitor.get_builder())
+        excp_value = excp.py_runtime_get_excp(
+            visitor.get_code_gen(), visitor.get_builder())
         excp_type = fly_obj.get_py_obj_type(visitor.get_builder(), excp_value)
-        excp_type = visitor.get_builder().ptr_cast(excp_value, code_type.get_py_obj_ptr(visitor.get_code_gen()))
+        excp_type = visitor.get_builder().ptr_cast(
+            excp_value, code_type.get_py_obj_ptr(visitor.get_code_gen()))
         obj_type, obj_type_value = visitor.visit_node(handler.type)
         type_match = visitor.get_builder().eq(obj_type_value, excp_type)
-        other_block = handlers_cond_block[i + 1] if i < len(try_node.handlers) - 1 else excp_not_found_block
-        visitor.get_builder().cond_br(type_match, handlers_block[i], other_block)
+        other_block = handlers_cond_block[i + 1] if i < len(
+            try_node.handlers) - 1 else excp_not_found_block
+        visitor.get_builder().cond_br(
+            type_match, handlers_block[i], other_block)
         visitor.get_builder().br(continue_block)
         visitor.get_builder().set_insert_block(handlers_block[i])
         visitor.visit_node(handler.body)

@@ -1,11 +1,13 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flyable.data.lang_func import LangFunc
+    from flyable.data.lang_class import LangClass
 
 import os
 from typing import Union
 from ast import Module
-
-import flyable.data.lang_func as lang_func
-import flyable.data.lang_class as lang_class
 
 
 class LangFile:
@@ -16,9 +18,9 @@ class LangFile:
     def __init__(self, path: str = "", txt: str = ""):
         self.__path: str = path
         self.__text: str = txt
-        self.__classes: list[lang_class.LangClass] = []
-        self.__funcs: list[lang_func.LangFunc] = []
-        self.__global_func: Union[lang_func.LangFunc, None] = None
+        self.__classes: list[LangClass] = []
+        self.__funcs: list[LangFunc] = []
+        self.__global_func: Union[LangFunc, None] = None
         self.__ast: Union[Module, None] = None
 
     def read_from_path(self, path: str):
@@ -26,7 +28,7 @@ class LangFile:
             self.__path = os.path.abspath(path)
             self.__text = f.read()
 
-    def find_content_by_name(self, name: str) -> Union[lang_func.LangFunc, lang_class.LangClass, None]:
+    def find_content_by_name(self, name: str) -> Union[LangFunc, LangClass, None]:
         """
         Looks at the list of functions to return the first with a matching name.
         If no match was found, looks at the list of classes to return the first with a matching name.
@@ -43,7 +45,7 @@ class LangFile:
                 return e
         return None
 
-    def find_content_by_id(self, id: int) -> Union[lang_func.LangFunc, lang_class.LangClass, None]:
+    def find_content_by_id(self, id: int) -> Union[LangFunc, LangClass, None]:
         """
         Looks at the list of functions to return the first with a matching id.
         If no match was found, looks at the list of classes to return the first with a matching id.
@@ -73,7 +75,7 @@ class LangFile:
         if self.__global_func is not None:
             self.__global_func.clear_info()
 
-    def add_class(self, _class: lang_class.LangClass):
+    def add_class(self, _class: LangClass):
         _class.set_file(self)
         self.__classes.append(_class)
 
@@ -83,14 +85,14 @@ class LangFile:
     def get_classes_count(self):
         return len(self.__classes)
 
-    def add_func(self, func: lang_func.LangFunc):
+    def add_func(self, func: LangFunc):
         func.set_file(self)
         self.__funcs.append(func)
 
     def get_func(self, index: int):
         return self.__funcs[index]
 
-    def set_global_func(self, global_func: lang_func.LangFunc):
+    def set_global_func(self, global_func: LangFunc):
         self.__global_func = global_func
 
     def get_global_func(self):
