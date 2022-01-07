@@ -129,6 +129,12 @@ class ParserVisitor(NodeVisitor):
 
         def assign(target: expr, value: expr):
             """Assign a value to a target or unpack if the target is an ast.Tuple"""
+            if isinstance(target, Tuple):  # unpacking
+                if isinstance(value, (ast.Tuple, ast.List)):  # valid unpacking
+                    unpack(target, value.elts)
+                else:
+                    self.__parser.throw_error(
+                        "Cannot unpack", node.lineno, node.end_col_offset)
 
         self.__assign_depth += 1
         targets: list[Union[list[expr], expr]] = []

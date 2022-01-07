@@ -136,3 +136,4 @@ dmypy.json
 cython_debug/
 .vscode/
 build3/win64/
+*.exe
