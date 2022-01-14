@@ -8,12 +8,12 @@ Linking : Combine the generated object file with Python runtime to generate an e
 Running : Run the generated program. Generated exe file will try to find an existing python installation on the setup.
 """
 
+import platform
+from pathlib import Path
+from subprocess import PIPE, Popen
+
 import flyable.compiler as com
 import flyable.tool.platform as plat
-from subprocess import Popen, PIPE
-from pathlib import Path
-import platform
-
 from flyable.tool.utils import Step, end_step, start_step
 
 
@@ -37,8 +37,7 @@ def main(file: str, output_dir: str = ".", exec_name: str = "a"):
 
     # Now link the code
     python_lib = "python310.lib" if platform.system() == "Windows" else "python3.10.a"
-    linker_args = ["gcc", "-flto", "output.o",
-                   "libFlyableRuntime.a", python_lib]
+    linker_args = ["gcc", "-flto", "output.o", "libFlyableRuntime.a", python_lib]
     p = Popen(linker_args, cwd=output_dir)
     p.wait()
     if p.returncode != 0:
@@ -55,8 +54,9 @@ def run_code(output_dir: str, exec_name: str):
         exec_name (str): the name of the executable
     """
     start_step("Running")
-    p = Popen([output_dir + f"/{exec_name}.exe"],
-              cwd=output_dir, stdin=PIPE, stdout=PIPE)
+    p = Popen(
+        [output_dir + f"/{exec_name}.exe"], cwd=output_dir, stdin=PIPE, stdout=PIPE
+    )
     output, err = p.communicate()
     end_step()
 
@@ -66,7 +66,7 @@ def run_code(output_dir: str, exec_name: str):
     print("Application ended with code " + str(p.returncode))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     dir = f"./build3/{plat.get_platform_folder()}"
     main("test.py", dir, "a")
-    #run_code(dir, "a")
+    # run_code(dir, "a")
