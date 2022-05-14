@@ -37,6 +37,8 @@ FLAG_LOG_DEBUG: DebugFlag[str] = DebugFlag(default_value="./debug.log")
 
 FLAG_SHOW_STEP_LEVEL: DebugFlag[int] = DebugFlag(default_value=1)
 
+FLAG_SHOW_REF_COUNT: DebugFlag = DebugFlag()
+
 FLAGS = {flag_name: flag for flag_name, flag in locals().items() if flag_name.startswith("FLAG_")}
 """
 Here is a dictionnary containing all the flags so you can access them programmatically.

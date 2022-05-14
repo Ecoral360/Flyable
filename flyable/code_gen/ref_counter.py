@@ -2,21 +2,37 @@
 Module with the functions related to code generation of code managing the reference counter
 """
 from __future__ import annotations
+
 from functools import wraps
 from typing import TYPE_CHECKING, Callable, Any
+
 import flyable.data.lang_type as lang_type
-import flyable.code_gen.fly_obj as fly_obj
-import flyable.code_gen.type as gen_type
-import flyable.code_gen.code_type as code_type
 import flyable.data.type_hint as hint
-import flyable.code_gen.caller as caller
-import flyable.code_gen.runtime as runtime
 from flyable.tool.utils import find_first
 
 if TYPE_CHECKING:
     from flyable.data.lang_type import LangType
     from flyable.code_gen.code_builder import CodeBuilder
     from flyable.parse.parser import ParserVisitor
+
+
+class RefCounter:
+    def __init__(self, obj_type: LangType, obj_value: int):
+        self.obj_type = obj_type
+        self.obj_value = obj_value
+
+    def __enter__(self):
+        ref_incr(self.obj_type, self.obj_value)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        ref_decr(self.obj_type, self.obj_value)
+
+    def __iter__(self):
+        return iter((self.obj_type, self.obj_value))
+
+    def __getitem__(self, item):
+        return (self.obj_type, self.obj_value)[item]
 
 
 def is_ref_counting_type(value_type: LangType):

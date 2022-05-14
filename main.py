@@ -22,11 +22,14 @@ from flyable.debug.debug_flags import DebugFlag, DebugFlagListType, enable_debug
 from flyable.debug.debug_flags_list import *
 from flyable.tool.utils import end_step, add_step
 
-ENABLED_DEBUG_FLAGS: DebugFlagListType = []
+ENABLED_DEBUG_FLAGS: DebugFlagListType = [
+    FLAG_SHOW_REF_COUNT
+]
 """
 Debug flags to be enabled during the compiling, the linking and the running process\n
 Pass a flag alone to enable it or pass a tuple to also give it a value
 """
+
 
 def get_module_paths(directory_name: str) -> str:
     paths = []
@@ -36,6 +39,7 @@ def get_module_paths(directory_name: str) -> str:
             if file_path.endswith(".py"):
                 paths.append(file_path)
     return paths
+
 
 def main(source: str, output_dir: str = ".", exec_name: str = "a"):
     add_step("Compiling")
@@ -66,6 +70,8 @@ def main(source: str, output_dir: str = ".", exec_name: str = "a"):
 
         if platform.system() == "Windows":
             linker_args.append(constants.PYTHON_3_11_DLL_PATH)
+        elif platform.system() == "Linux":
+            linker_args.append("./resources/build_files/libpython3.11.a")
 
         p = Popen(linker_args, cwd=output_dir)
         p.wait()
@@ -83,7 +89,7 @@ def run_code(output_dir: str, exec_name: str):
         exec_name (str): the name of the executable
     """
     add_step("Running")
-    
+
     p = Popen(
         [os.path.join(output_dir, exec_name), os.path.join(os.getcwd(), "test.py")],
         cwd=os.path.dirname(os.path.realpath(sys.executable)),
@@ -99,6 +105,7 @@ def run_code(output_dir: str, exec_name: str):
     print("-------------------")
 
     print("Application ended with code " + str(p.returncode))
+
 
 if __name__ == "__main__":
     # toggles on the debug flags
@@ -117,4 +124,3 @@ if __name__ == "__main__":
         run_code(str(Path("./build/macos-arm64").resolve()), "a.out")
     elif platform.system() == "Linux":
         run_code(str(Path("./build/linux64").resolve()), "a.out")
-
